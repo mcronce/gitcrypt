@@ -17,6 +17,8 @@ import (
 	"unsafe"
 )
 
+const ITERATIONS_PER_TIMESTAMP = 32
+
 type Commit struct {
 	Text []byte
 	Hash []byte
@@ -78,6 +80,17 @@ func int64_as_bytes(i *int64) []byte /* {{{ */ {
 	}))
 } // }}}
 
+var int_md5s [ITERATIONS_PER_TIMESTAMP][]byte
+func cache_int_md5s() /* {{{ */ {
+	var i uint16
+	i_bytes := uint16_as_bytes(&i)
+	for i = 0; i < ITERATIONS_PER_TIMESTAMP; i++ {
+		int_checksum := md5.Sum(i_bytes)
+		int_md5s[i] = make([]byte, md5.Size * 2)
+		hex.Encode(int_md5s[i], int_checksum[:])
+	}
+} // }}}
+
 var hashes uint64
 func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
 	zero := byte(0)
@@ -97,19 +110,17 @@ func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit,
 
 	var i uint16
 	var nanos int64
-	i_bytes := uint16_as_bytes(&i)
 	nano_bytes := int64_as_bytes(&nanos)
 	for {
 		nanos = time.Now().UnixNano()
 		nano_checksum := md5.Sum(nano_bytes)
 		hex.Encode(commit[nanosec_md5_position:], nano_checksum[:])
-		for i = 0; i < 32; i++ {
-			int_checksum := md5.Sum(i_bytes)
-			hex.Encode(commit[int_md5_position:], int_checksum[:])
+		for i = 0; i < ITERATIONS_PER_TIMESTAMP; i++ {
+			copy(commit[int_md5_position:], int_md5s[i])
 			sha := sha1.Sum(commit)
 			atomic.AddUint64(&hashes, 1)
 			if(sha[0] == zero && sha[1] == zero) {
-				fmt.Printf("%x %x %x %d\n", sha, nano_checksum, int_checksum, i)
+				fmt.Printf("%x %x %s %d\n", sha, nano_checksum, int_md5s[i], i)
 				if(sha[2] == zero) {
 					commit_channel <- &Commit{
 						Text: commit[len(commit_header):],
@@ -174,6 +185,7 @@ func main() {
 	}
 
 	timestamp := get_git_timestamp()
+	cache_int_md5s()
 	message := flag.Arg(0)
 
 	commit_prefix := []byte(fmt.Sprintf("tree %s\nparent %s\nauthor %s <%s> %s\ncommitter %s <%s> %s\n\n%s\n\n\nTo pass the absurd cryptographic restriction, I have appended these hashes:  ",
