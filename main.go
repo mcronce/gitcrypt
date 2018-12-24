@@ -23,7 +23,7 @@ type Commit struct {
 }
 
 // WARNING: HERE BE DRAGONS
-func str_to_bytes(str string) []byte {
+func str_to_bytes(str string) []byte /* {{{ */ {
 	string_header := (*reflect.StringHeader)(unsafe.Pointer(&str))
     bytes_header := &reflect.SliceHeader{
         Data : string_header.Data,
@@ -31,52 +31,52 @@ func str_to_bytes(str string) []byte {
         Cap : string_header.Len,
     }
     return *(*[]byte)(unsafe.Pointer(bytes_header))
-}
+} // }}}
 
 // WARNING: HERE BE DRAGONS
-func bytes_to_str(bytes []byte) string {
+func bytes_to_str(bytes []byte) string /* {{{ */ {
     bytes_header := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
     string_header := &reflect.StringHeader{
         Data : bytes_header.Data,
         Len : bytes_header.Len,
     }
     return *(*string)(unsafe.Pointer(string_header))
-}
+} // }}}
 
 // WARNING: HERE BE (admittedly smaller) DRAGONS.
-func get_goroutine_id_hash() []byte {
+func get_goroutine_id_hash() []byte /* {{{ */ {
 	b := make([]byte, 64)
 	b = b[:runtime.Stack(b, false)]
 	b = bytes.TrimPrefix(b, []byte("goroutine "))
 	b = b[:bytes.IndexByte(b, ' ')]
 	sum := md5.Sum(b)
 	return []byte(hex.EncodeToString(sum[:]))
-}
+} // }}}
 
-func replace_section(bytes []byte, pos int, repl []byte) {
+func replace_section(bytes []byte, pos int, repl []byte) /* {{{ */ {
 	end_pos := len(repl)
 	for i := 0; i < end_pos; i++ {
 		bytes[i + pos] = repl[i]
 	}
-}
+} // }}}
 
 // WARNING:  HERE BE DRAGONS
-func uint16_as_bytes(i *uint16) []byte {
+func uint16_as_bytes(i *uint16) []byte /* {{{ */ {
 	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(i)),
 		Len: 2,
 		Cap: 2,
 	}))
-}
+} // }}}
 
 // WARNING:  HERE BE DRAGONS
-func int64_as_bytes(i *int64) []byte {
+func int64_as_bytes(i *int64) []byte /* {{{ */ {
 	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(i)),
 		Len: 8,
 		Cap: 8,
 	}))
-}
+} // }}}
 
 var hashes uint64
 func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
@@ -128,7 +128,7 @@ func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit,
 	}
 }
 
-func get_git_timestamp() string {
+func get_git_timestamp() string /* {{{ */ {
 	now := time.Now()
 	_, offset := now.Zone()
 	// Going from seconds to hours/minutes offset is a shit show, but at least it only has to happen once 
@@ -140,7 +140,7 @@ func get_git_timestamp() string {
 	hours_part := int(offset / 3600)
 	minutes_part := int((offset % 3600) / 60)
 	return fmt.Sprintf("%d %s%02d%02d", now.Unix(), sign, hours_part, minutes_part)
-}
+} // }}}
 
 func main() {
 	flag.Parse()
