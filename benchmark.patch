@@ -1,17 +1,17 @@
 diff --git a/main.go b/main.go
-index 03fc969..e7a6163 100644
+index 43540c1..8376eb4 100644
 --- a/main.go
 +++ b/main.go
-@@ -109,13 +109,15 @@ func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit,
+@@ -120,13 +120,15 @@ func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit,
  			sha := sha1.Sum(commit)
  			atomic.AddUint64(&hashes, 1)
  			if(sha[0] == zero && sha[1] == zero) {
--				fmt.Printf("%x %x %x %d\n", sha, nano_checksum, int_checksum, i)
+-				fmt.Printf("%x %x %s %d\n", sha, nano_checksum, int_md5s[i], i)
  				if(sha[2] == zero) {
 -					commit_channel <- &Commit{
 -						Text: commit[len(commit_header):],
 -						Hash: sha[:],
-+					fmt.Printf("%x %x %x %d\n", sha, nano_checksum, int_checksum, i)
++					fmt.Printf("%x %x %s %d\n", sha, nano_checksum, int_md5s[i], i)
 +					if(sha[3] < byte(16)) {
 +						commit_channel <- &Commit{
 +							Text: commit[len(commit_header):],
