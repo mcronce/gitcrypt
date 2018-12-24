@@ -17,7 +17,7 @@ import (
 	"unsafe"
 )
 
-const ITERATIONS_PER_TIMESTAMP = 65535
+const ITERATIONS_PER_TIMESTAMP = math.MaxUint16
 
 type Commit struct {
 	Text []byte
@@ -185,8 +185,12 @@ func main() {
 	}
 
 	timestamp := get_git_timestamp()
-	cache_int_md5s()
 	message := flag.Arg(0)
+
+	start := time.Now()
+	cache_int_md5s()
+	elapsed := time.Now().Sub(start).Seconds()
+	fmt.Printf("--- Caching %d MD5 checksums took %f seconds\n", ITERATIONS_PER_TIMESTAMP, elapsed)
 
 	commit_prefix := []byte(fmt.Sprintf("tree %s\nparent %s\nauthor %s <%s> %s\ncommitter %s <%s> %s\n\n%s\n\n\nTo pass the absurd cryptographic restriction, I have appended these hashes:  ",
 		strings.TrimSpace(string(git_write_tree)),
@@ -199,13 +203,12 @@ func main() {
 	terminate_channel := make(chan struct{})
 
 	hashes = 0
-	start := time.Now()
 	for i := 0; i < runtime.GOMAXPROCS(-1); i++ {
 		go find_commit_that_works(commit_prefix, commit_channel, terminate_channel)
 	}
 
 	commit := <-commit_channel
-	elapsed := time.Now().Sub(start).Seconds()
+	elapsed = time.Now().Sub(start).Seconds()
 	fmt.Printf("--- Calculated %d hashes in %f seconds, for a total of %f hashes /sec\n", atomic.LoadUint64(&hashes), elapsed, float64(atomic.LoadUint64(&hashes)) / elapsed)
 
 	our_commit_hash := hex.EncodeToString(commit.Hash)
