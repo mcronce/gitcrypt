@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unsafe"
 )
@@ -60,6 +61,7 @@ func replace_section(bytes []byte, pos int, repl []byte) {
 	}
 }
 
+var hashes uint64
 func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
 	zero := byte(0)
 
@@ -81,6 +83,7 @@ func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit,
 			checksum := md5.Sum(int_bytes)
 			hex.Encode(commit[mutable_position:], checksum[:])
 			sha := sha1.Sum(commit)
+			atomic.AddUint64(&hashes, 1)
 			if(sha[0] == zero && sha[1] == zero) {
 				fmt.Printf("%x %x %d\n", sha, checksum, i)
 				if(sha[2] == zero) {
@@ -159,11 +162,16 @@ func main() {
 	commit_channel := make(chan *Commit)
 	terminate_channel := make(chan struct{})
 
+	hashes = 0
+	start := time.Now()
 	for i := 0; i < runtime.GOMAXPROCS(-1); i++ {
 		go find_commit_that_works(commit_prefix, commit_channel, terminate_channel)
 	}
 
 	commit := <-commit_channel
+	elapsed := time.Now().Sub(start).Seconds()
+	fmt.Printf("--- Calculated %d hashes in %f seconds, for a total of %f hashes /sec\n", atomic.LoadUint64(&hashes), elapsed, float64(atomic.LoadUint64(&hashes)) / elapsed)
+
 	our_commit_hash := hex.EncodeToString(commit.Hash)
 	fmt.Printf("--- Found a thing that works (sha1 %s):\n", our_commit_hash)
 	for _, line := range strings.Split(string(commit.Text), "\n") {
