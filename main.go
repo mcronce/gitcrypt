@@ -3,7 +3,6 @@ import (
 	"bytes"
 	"crypto/md5"
 	"crypto/sha1"
-	"encoding/binary"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -61,6 +60,24 @@ func replace_section(bytes []byte, pos int, repl []byte) {
 	}
 }
 
+// WARNING:  HERE BE DRAGONS
+func uint16_as_bytes(i *uint16) []byte {
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(i)),
+		Len: 2,
+		Cap: 2,
+	}))
+}
+
+// WARNING:  HERE BE DRAGONS
+func int64_as_bytes(i *int64) []byte {
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(i)),
+		Len: 8,
+		Cap: 8,
+	}))
+}
+
 var hashes uint64
 func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
 	zero := byte(0)
@@ -78,18 +95,16 @@ func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit,
 	int_md5_position = int_md5_position + len(commit_header)
 	commit = append(commit_header, commit...)
 
-	nano_bytes := make([]byte, binary.MaxVarintLen64)
-	int_bytes := make([]byte, binary.MaxVarintLen16)
 	var i uint16
 	var nanos int64
+	i_bytes := uint16_as_bytes(&i)
+	nano_bytes := int64_as_bytes(&nanos)
 	for {
 		nanos = time.Now().UnixNano()
-		binary.PutVarint(nano_bytes, nanos)
 		nano_checksum := md5.Sum(nano_bytes)
 		hex.Encode(commit[nanosec_md5_position:], nano_checksum[:])
 		for i = 0; i < 32; i++ {
-			binary.LittleEndian.PutUint16(int_bytes, i)
-			int_checksum := md5.Sum(int_bytes)
+			int_checksum := md5.Sum(i_bytes)
 			hex.Encode(commit[int_md5_position:], int_checksum[:])
 			sha := sha1.Sum(commit)
 			atomic.AddUint64(&hashes, 1)
