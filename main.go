@@ -17,7 +17,7 @@ import (
 	"unsafe"
 )
 
-const ITERATIONS_PER_TIMESTAMP = 32
+const ITERATIONS_PER_TIMESTAMP = 65535
 
 type Commit struct {
 	Text []byte
