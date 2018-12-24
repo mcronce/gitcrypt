@@ -67,25 +67,34 @@ func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit,
 
 	commit := append(commit_prefix, get_goroutine_id_hash()...)
 	commit = append(commit, byte(' '))
-	mutable_position := len(commit)
+	nanosec_md5_position := len(commit)
+	commit = append(commit, make([]byte, md5.Size * 2, byte('0'))...)
+	commit = append(commit, byte(' '))
+	int_md5_position := len(commit)
 	commit = append(commit, make([]byte, md5.Size * 2, byte('0'))...)
 	commit = append(commit, byte('\n'))
 	commit_header := []byte(fmt.Sprintf("commit %d\000", len(commit)))
-	mutable_position = mutable_position + len(commit_header)
+	nanosec_md5_position = nanosec_md5_position + len(commit_header)
+	int_md5_position = int_md5_position + len(commit_header)
 	commit = append(commit_header, commit...)
 
-	int_bytes := make([]byte, binary.MaxVarintLen64)
-	var i, nanos int64
+	nano_bytes := make([]byte, binary.MaxVarintLen64)
+	int_bytes := make([]byte, binary.MaxVarintLen16)
+	var i uint16
+	var nanos int64
 	for {
 		nanos = time.Now().UnixNano()
+		binary.PutVarint(nano_bytes, nanos)
+		nano_checksum := md5.Sum(nano_bytes)
+		hex.Encode(commit[nanosec_md5_position:], nano_checksum[:])
 		for i = 0; i < 32; i++ {
-			binary.PutVarint(int_bytes, nanos + i)
-			checksum := md5.Sum(int_bytes)
-			hex.Encode(commit[mutable_position:], checksum[:])
+			binary.LittleEndian.PutUint16(int_bytes, i)
+			int_checksum := md5.Sum(int_bytes)
+			hex.Encode(commit[int_md5_position:], int_checksum[:])
 			sha := sha1.Sum(commit)
 			atomic.AddUint64(&hashes, 1)
 			if(sha[0] == zero && sha[1] == zero) {
-				fmt.Printf("%x %x %d\n", sha, checksum, i)
+				fmt.Printf("%x %x %x %d\n", sha, nano_checksum, int_checksum, i)
 				if(sha[2] == zero) {
 					commit_channel <- &Commit{
 						Text: commit[len(commit_header):],
