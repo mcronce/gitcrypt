@@ -1,17 +1,15 @@
-package main
+package gitcrypt
 import (
 	"bytes"
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/hex"
-	"flag"
+	"errors"
 	"fmt"
 	"math"
-	"os"
 	"os/exec"
 	"reflect"
 	"runtime"
-	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -21,7 +19,7 @@ const ITERATIONS_PER_TIMESTAMP = math.MaxUint16
 
 type Commit struct {
 	Text []byte
-	Hash []byte
+	Hash string
 }
 
 // WARNING: HERE BE DRAGONS
@@ -92,7 +90,7 @@ func cache_int_md5s() /* {{{ */ {
 } // }}}
 
 var hashes uint64
-func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
+func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
 	zero := byte(0)
 
 	commit := append(commit_prefix, get_goroutine_id_hash()...)
@@ -124,7 +122,7 @@ func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit,
 				if(sha[2] == zero) {
 					commit_channel <- &Commit{
 						Text: commit[len(commit_header):],
-						Hash: sha[:],
+						Hash: hex.EncodeToString(sha[:]),
 					}
 					return
 				}
@@ -139,7 +137,7 @@ func find_commit_that_works(commit_prefix []byte, commit_channel chan<- *Commit,
 	}
 }
 
-func get_git_timestamp() string /* {{{ */ {
+func GetGitTimestamp() string /* {{{ */ {
 	now := time.Now()
 	_, offset := now.Zone()
 	// Going from seconds to hours/minutes offset is a shit show, but at least it only has to happen once 
@@ -153,77 +151,42 @@ func get_git_timestamp() string /* {{{ */ {
 	return fmt.Sprintf("%d %s%02d%02d", now.Unix(), sign, hours_part, minutes_part)
 } // }}}
 
-func main() {
-	flag.Parse()
-	if(flag.NArg() != 1) {
-		print("usage: commit 'message'\n")
-		os.Exit(1)
-	}
-
-	git_write_tree, err := exec.Command("git", "write-tree").Output()
-	if(err != nil) {
-		fmt.Printf("!!! %s\n", err)
-		os.Exit(2)
-	}
-
-	git_rev_parse, err := exec.Command("git", "rev-parse", "HEAD").Output()
-	if(err != nil) {
-		fmt.Printf("!!! %s\n", err)
-		os.Exit(2)
-	}
-
-	git_user_name, err := exec.Command("git", "config", "--get", "user.name").Output()
-	if(err != nil) {
-		fmt.Printf("!!! %s\n", err)
-		os.Exit(2)
-	}
-
-	git_user_email, err := exec.Command("git", "config", "--get", "user.email").Output()
-	if(err != nil) {
-		fmt.Printf("!!! %s\n", err)
-		os.Exit(2)
-	}
-
-	timestamp := get_git_timestamp()
-	message := flag.Arg(0)
-
+func FindCommitThatWorks(in_commit []byte) *Commit {
 	start := time.Now()
 	cache_int_md5s()
 	elapsed := time.Now().Sub(start).Seconds()
 	fmt.Printf("--- Caching %d MD5 checksums took %f seconds\n", ITERATIONS_PER_TIMESTAMP, elapsed)
-
-	commit_prefix := []byte(fmt.Sprintf("tree %s\nparent %s\nauthor %s <%s> %s\ncommitter %s <%s> %s\n\n%s\n\n\nTo pass the absurd cryptographic restriction, I have appended these hashes:  ",
-		strings.TrimSpace(string(git_write_tree)),
-		strings.TrimSpace(string(git_rev_parse)),
-		strings.TrimSpace(string(git_user_name)), strings.TrimSpace(string(git_user_email)), timestamp,
-		strings.TrimSpace(string(git_user_name)), strings.TrimSpace(string(git_user_email)), timestamp,
-		message,
-	))
 	commit_channel := make(chan *Commit)
 	terminate_channel := make(chan struct{})
 
 	hashes = 0
 	for i := 0; i < runtime.GOMAXPROCS(-1); i++ {
-		go find_commit_that_works(commit_prefix, commit_channel, terminate_channel)
+		go commit_message_worker(in_commit, commit_channel, terminate_channel)
 	}
 
 	commit := <-commit_channel
 	elapsed = time.Now().Sub(start).Seconds()
 	fmt.Printf("--- Calculated %d hashes in %f seconds, for a total of %f hashes /sec\n", atomic.LoadUint64(&hashes), elapsed, float64(atomic.LoadUint64(&hashes)) / elapsed)
 
-	our_commit_hash := hex.EncodeToString(commit.Hash)
-	fmt.Printf("--- Found a thing that works (sha1 %s):\n", our_commit_hash)
-	for _, line := range strings.Split(string(commit.Text), "\n") {
-		fmt.Printf("\t%s\n", line)
-	}
-
 	close(terminate_channel)
+	return commit
+}
 
+func MakeCommitPrefix(tree string, parent string, author_name string, author_email string, author_time string, committer_name string, committer_email string, committer_time string, message string) []byte {
+	return []byte(fmt.Sprintf("tree %s\nparent %s\nauthor %s <%s> %s\ncommitter %s <%s> %s\n\n%s\n\n\nTo pass the absurd cryptographic restriction, I have appended these hashes:  ",
+		tree,
+		parent,
+		author_name, author_email, author_time,
+		committer_name, committer_email, committer_time,
+		message,
+	))
+}
+
+func WriteCommit(commit *Commit) error {
 	git_hash_object := exec.Command("git", "hash-object", "-t", "commit", "-w", "--stdin")
 	f, err := git_hash_object.StdinPipe()
 	if(err != nil) {
-		fmt.Printf("!!! %s\n", err)
-		os.Exit(2)
+		return err
 	}
 	go func() {
 		defer f.Close()
@@ -231,20 +194,17 @@ func main() {
 	}()
 	git_commit_hash, err := git_hash_object.CombinedOutput()
 	if(err != nil) {
-		fmt.Printf("!!! %s\n%s\n", err, git_commit_hash)
-		os.Exit(3)
-	}
-	fmt.Printf("--- `git hash-object` result: %s\n", git_commit_hash)
-
-	if(string(git_commit_hash[:40]) != our_commit_hash) {
-		fmt.Printf("!!! Hash mismatch (%s vs %s)\n", string(git_commit_hash[:40]), string(our_commit_hash))
-		os.Exit(4)
+		return errors.New(fmt.Sprintf("%s (%s)", err, git_commit_hash))
 	}
 
-	_, err = exec.Command("git", "reset", "--hard", our_commit_hash).Output()
+	if(string(git_commit_hash[:40]) != commit.Hash) {
+		return errors.New(fmt.Sprintf("Hash mismatch (%s vs %s)", string(git_commit_hash[:40]), commit.Hash))
+	}
+
+	_, err = exec.Command("git", "reset", "--hard", commit.Hash).Output()
 	if(err != nil) {
-		fmt.Printf("!!! %s\n", err)
-		os.Exit(5)
+		return err
 	}
+	return nil
 }
 
