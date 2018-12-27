@@ -31,7 +31,7 @@ func init() {
 	re_commit = regexp.MustCompile("^tree ([0-9a-f]+)\nparent ([0-9a-f]+)\nauthor ([^<]+ <[^>]+>) ([0-9 +-]+)\ncommitter ([^<]+ <[^>]+>) ([0-9 +-]+)\n\n(?s:(.+))")
 }
 
-func build_whole_commit(main_commit []byte) ([]byte, int, int, int) {
+func build_whole_commit(main_commit []byte) ([]byte, int, int, int) /* {{{ */ {
 	commit := append(main_commit, get_goroutine_id_hash()...)
 	commit = append(commit, byte(' '))
 	nanosec_md5_position := len(commit)
@@ -47,9 +47,9 @@ func build_whole_commit(main_commit []byte) ([]byte, int, int, int) {
 	commit = append(commit_header, commit...)
 
 	return commit, commit_header_length, nanosec_md5_position, int_md5_position
-}
+} // }}}
 
-func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
+func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) /* {{{ */ {
 	commit, commit_header_length, nanosec_md5_position, int_md5_position := build_whole_commit(commit_prefix)
 
 	var i uint16
@@ -80,9 +80,9 @@ func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, 
 				// Next loop iteration
 		}
 	}
-}
+} // }}}
 
-func GetGitTimestamp() string {
+func GetGitTimestamp() string /* {{{ */ {
 	now := time.Now()
 	_, offset := now.Zone()
 	// Going from seconds to hours/minutes offset is a shit show, but at least it only has to happen once 
@@ -94,9 +94,9 @@ func GetGitTimestamp() string {
 	hours_part := int(offset / 3600)
 	minutes_part := int((offset % 3600) / 60)
 	return fmt.Sprintf("%d %s%02d%02d", now.Unix(), sign, hours_part, minutes_part)
-}
+} // }}}
 
-func FindCommitThatWorks(in_commit []byte) *Commit {
+func FindCommitThatWorks(in_commit []byte) *Commit /* {{{ */ {
 	start := time.Now()
 	cache_int_md5s()
 	elapsed := time.Now().Sub(start).Seconds()
@@ -115,13 +115,13 @@ func FindCommitThatWorks(in_commit []byte) *Commit {
 
 	close(terminate_channel)
 	return commit
-}
+} // }}}
 
-func MakeFullUser(name string, email string) string {
+func MakeFullUser(name string, email string) string /* {{{ */ {
 	return fmt.Sprintf("%s <%s>", name, email)
-}
+} // }}}
 
-func MakeCommitPrefix(tree string, parent string, author string, author_time string, committer string, committer_time string, message string) []byte {
+func MakeCommitPrefix(tree string, parent string, author string, author_time string, committer string, committer_time string, message string) []byte /* {{{ */ {
 	return []byte(fmt.Sprintf("tree %s\nparent %s\nauthor %s %s\ncommitter %s %s\n\n%s%s  ",
 		tree,
 		parent,
@@ -130,23 +130,23 @@ func MakeCommitPrefix(tree string, parent string, author string, author_time str
 		message,
 		OUR_MESSAGE,
 	))
-}
+} // }}}
 
-func ParseCommit(commit string) (bool, string, string, string, string, string, string, string) {
-		matches := re_commit.FindStringSubmatch(commit)
-		if(matches == nil) {
-			return false, "", "", "", "", "", "", ""
-		}
+func ParseCommit(commit string) (bool, string, string, string, string, string, string, string) /* {{{ */ {
+	matches := re_commit.FindStringSubmatch(commit)
+	if(matches == nil) {
+		return false, "", "", "", "", "", "", ""
+	}
 
-		i := strings.Index(matches[7], OUR_MESSAGE)
-		if(i == -1) {
-			return true, matches[1], matches[2], matches[3], matches[4], matches[5], matches[6], matches[7]
-		}
+	i := strings.Index(matches[7], OUR_MESSAGE)
+	if(i == -1) {
+		return true, matches[1], matches[2], matches[3], matches[4], matches[5], matches[6], matches[7]
+	}
 
-		return true, matches[1], matches[2], matches[3], matches[4], matches[5], matches[6], matches[7][:i]
-}
+	return true, matches[1], matches[2], matches[3], matches[4], matches[5], matches[6], matches[7][:i]
+} // }}}
 
-func WriteCommit(commit *Commit) error {
+func WriteCommit(commit *Commit) error /* {{{ */ {
 	git_hash_object := exec.Command("git", "hash-object", "-t", "commit", "-w", "--stdin")
 	f, err := git_hash_object.StdinPipe()
 	if(err != nil) {
@@ -170,5 +170,5 @@ func WriteCommit(commit *Commit) error {
 		return err
 	}
 	return nil
-}
+} // }}}
 
