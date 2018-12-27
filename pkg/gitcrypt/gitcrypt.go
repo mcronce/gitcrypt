@@ -23,15 +23,14 @@ type Commit struct {
 }
 
 var re_commit *regexp.Regexp
+var zero byte
 func init() {
+	zero = byte(0)
 	re_commit = regexp.MustCompile("^tree ([0-9a-f]+)\nparent ([0-9a-f]+)\nauthor ([^<]+ <[^>]+>) ([0-9 +-]+)\ncommitter ([^<]+ <[^>]+>) ([0-9 +-]+)\n\n(?s:(.+))")
 }
 
-var hashes uint64
-func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
-	zero := byte(0)
-
-	commit := append(commit_prefix, get_goroutine_id_hash()...)
+func build_whole_commit(main_commit []byte) ([]byte, int, int, int) {
+	commit := append(main_commit, get_goroutine_id_hash()...)
 	commit = append(commit, byte(' '))
 	nanosec_md5_position := len(commit)
 	commit = append(commit, make([]byte, md5.Size * 2, byte('0'))...)
@@ -40,9 +39,17 @@ func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, 
 	commit = append(commit, make([]byte, md5.Size * 2, byte('0'))...)
 	commit = append(commit, byte('\n'))
 	commit_header := []byte(fmt.Sprintf("commit %d\000", len(commit)))
-	nanosec_md5_position = nanosec_md5_position + len(commit_header)
-	int_md5_position = int_md5_position + len(commit_header)
+	commit_header_length := len(commit_header)
+	nanosec_md5_position = nanosec_md5_position + commit_header_length
+	int_md5_position = int_md5_position + commit_header_length
 	commit = append(commit_header, commit...)
+
+	return commit, commit_header_length, nanosec_md5_position, int_md5_position
+}
+
+var hashes uint64
+func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
+	commit, commit_header_length, nanosec_md5_position, int_md5_position := build_whole_commit(commit_prefix)
 
 	var i uint16
 	var nanos int64
@@ -58,7 +65,7 @@ func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, 
 			if(sha[0] == zero && sha[1] == zero) {
 				if(sha[2] == zero) {
 					commit_channel <- &Commit{
-						Text: commit[len(commit_header):],
+						Text: commit[commit_header_length:],
 						Hash: hex.EncodeToString(sha[:]),
 					}
 					return
