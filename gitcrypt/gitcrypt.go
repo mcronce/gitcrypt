@@ -126,7 +126,6 @@ func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, 
 			sha := sha1.Sum(commit)
 			atomic.AddUint64(&hashes, 1)
 			if(sha[0] == zero && sha[1] == zero) {
-				fmt.Printf("%x %x %s %d\n", sha, nano_checksum, int_md5s[i], i)
 				if(sha[2] == zero) {
 					commit_channel <- &Commit{
 						Text: commit[len(commit_header):],
