@@ -46,8 +46,8 @@ func main() {
 	commit_prefix := gitcrypt.MakeCommitPrefix(
 		strings.TrimSpace(string(git_write_tree)),
 		strings.TrimSpace(string(git_rev_parse)),
-		strings.TrimSpace(string(git_user_name)), strings.TrimSpace(string(git_user_email)), timestamp,
-		strings.TrimSpace(string(git_user_name)), strings.TrimSpace(string(git_user_email)), timestamp,
+		gitcrypt.MakeFullUser(strings.TrimSpace(string(git_user_name)), strings.TrimSpace(string(git_user_email))), timestamp,
+		gitcrypt.MakeFullUser(strings.TrimSpace(string(git_user_name)), strings.TrimSpace(string(git_user_email))), timestamp,
 		message,
 	)
 
