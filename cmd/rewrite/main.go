@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/mcronce/gitcrypt/gitcrypt"
+	"github.com/mcronce/gitcrypt/pkg/gitcrypt"
 )
 
 type MapStringString map[string]string

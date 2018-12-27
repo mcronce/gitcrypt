@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/mcronce/gitcrypt/gitcrypt"
+	"github.com/mcronce/gitcrypt/pkg/gitcrypt"
 )
 
 func main() {
