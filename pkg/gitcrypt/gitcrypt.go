@@ -24,8 +24,10 @@ type Commit struct {
 
 var re_commit *regexp.Regexp
 var zero byte
+var hashes uint64
 func init() {
 	zero = byte(0)
+	hashes = 0
 	re_commit = regexp.MustCompile("^tree ([0-9a-f]+)\nparent ([0-9a-f]+)\nauthor ([^<]+ <[^>]+>) ([0-9 +-]+)\ncommitter ([^<]+ <[^>]+>) ([0-9 +-]+)\n\n(?s:(.+))")
 }
 
@@ -47,7 +49,6 @@ func build_whole_commit(main_commit []byte) ([]byte, int, int, int) {
 	return commit, commit_header_length, nanosec_md5_position, int_md5_position
 }
 
-var hashes uint64
 func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
 	commit, commit_header_length, nanosec_md5_position, int_md5_position := build_whole_commit(commit_prefix)
 
