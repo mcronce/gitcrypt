@@ -1,6 +1,5 @@
 package gitcrypt
 import (
-	"bytes"
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/hex"
@@ -8,13 +7,11 @@ import (
 	"fmt"
 	"math"
 	"os/exec"
-	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
-	"unsafe"
 )
 
 const ITERATIONS_PER_TIMESTAMP = math.MaxUint16
@@ -26,76 +23,9 @@ type Commit struct {
 }
 
 var re_commit *regexp.Regexp
-func init() /* {{{ */ {
+func init() {
 	re_commit = regexp.MustCompile("^tree ([0-9a-f]+)\nparent ([0-9a-f]+)\nauthor ([^<]+ <[^>]+>) ([0-9 +-]+)\ncommitter ([^<]+ <[^>]+>) ([0-9 +-]+)\n\n(?s:(.+))")
-} // }}}
-
-// WARNING: HERE BE DRAGONS
-func str_to_bytes(str string) []byte /* {{{ */ {
-	string_header := (*reflect.StringHeader)(unsafe.Pointer(&str))
-    bytes_header := &reflect.SliceHeader{
-        Data : string_header.Data,
-        Len : string_header.Len,
-        Cap : string_header.Len,
-    }
-    return *(*[]byte)(unsafe.Pointer(bytes_header))
-} // }}}
-
-// WARNING: HERE BE DRAGONS
-func bytes_to_str(bytes []byte) string /* {{{ */ {
-    bytes_header := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
-    string_header := &reflect.StringHeader{
-        Data : bytes_header.Data,
-        Len : bytes_header.Len,
-    }
-    return *(*string)(unsafe.Pointer(string_header))
-} // }}}
-
-// WARNING: HERE BE (admittedly smaller) DRAGONS.
-func get_goroutine_id_hash() []byte /* {{{ */ {
-	b := make([]byte, 64)
-	b = b[:runtime.Stack(b, false)]
-	b = bytes.TrimPrefix(b, []byte("goroutine "))
-	b = b[:bytes.IndexByte(b, ' ')]
-	sum := md5.Sum(b)
-	return []byte(hex.EncodeToString(sum[:]))
-} // }}}
-
-func replace_section(bytes []byte, pos int, repl []byte) /* {{{ */ {
-	end_pos := len(repl)
-	for i := 0; i < end_pos; i++ {
-		bytes[i + pos] = repl[i]
-	}
-} // }}}
-
-// WARNING:  HERE BE DRAGONS
-func uint16_as_bytes(i *uint16) []byte /* {{{ */ {
-	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(i)),
-		Len: 2,
-		Cap: 2,
-	}))
-} // }}}
-
-// WARNING:  HERE BE DRAGONS
-func int64_as_bytes(i *int64) []byte /* {{{ */ {
-	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(i)),
-		Len: 8,
-		Cap: 8,
-	}))
-} // }}}
-
-var int_md5s [ITERATIONS_PER_TIMESTAMP][]byte
-func cache_int_md5s() /* {{{ */ {
-	var i uint16
-	i_bytes := uint16_as_bytes(&i)
-	for i = 0; i < ITERATIONS_PER_TIMESTAMP; i++ {
-		int_checksum := md5.Sum(i_bytes)
-		int_md5s[i] = make([]byte, md5.Size * 2)
-		hex.Encode(int_md5s[i], int_checksum[:])
-	}
-} // }}}
+}
 
 var hashes uint64
 func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, terminate_channel <-chan struct{}) {
@@ -144,7 +74,7 @@ func commit_message_worker(commit_prefix []byte, commit_channel chan<- *Commit, 
 	}
 }
 
-func GetGitTimestamp() string /* {{{ */ {
+func GetGitTimestamp() string {
 	now := time.Now()
 	_, offset := now.Zone()
 	// Going from seconds to hours/minutes offset is a shit show, but at least it only has to happen once 
@@ -156,7 +86,7 @@ func GetGitTimestamp() string /* {{{ */ {
 	hours_part := int(offset / 3600)
 	minutes_part := int((offset % 3600) / 60)
 	return fmt.Sprintf("%d %s%02d%02d", now.Unix(), sign, hours_part, minutes_part)
-} // }}}
+}
 
 func FindCommitThatWorks(in_commit []byte) *Commit {
 	start := time.Now()
