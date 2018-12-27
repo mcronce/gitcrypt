@@ -9,18 +9,26 @@ import (
 	"math"
 	"os/exec"
 	"reflect"
+	"regexp"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
 )
 
 const ITERATIONS_PER_TIMESTAMP = math.MaxUint16
+const OUR_MESSAGE = "\n\n\nTo pass the absurd cryptographic restriction, I have appended these hashes:"
 
 type Commit struct {
 	Text []byte
 	Hash string
 }
+
+var re_commit *regexp.Regexp
+func init() /* {{{ */ {
+	re_commit = regexp.MustCompile("^tree ([0-9a-f]+)\nparent ([0-9a-f]+)\nauthor ([^<]+ <[^>]+>) ([0-9 +-]+)\ncommitter ([^<]+ <[^>]+>) ([0-9 +-]+)\n\n(?s:(.+))")
+} // }}}
 
 // WARNING: HERE BE DRAGONS
 func str_to_bytes(str string) []byte /* {{{ */ {
@@ -172,14 +180,33 @@ func FindCommitThatWorks(in_commit []byte) *Commit {
 	return commit
 }
 
-func MakeCommitPrefix(tree string, parent string, author_name string, author_email string, author_time string, committer_name string, committer_email string, committer_time string, message string) []byte {
-	return []byte(fmt.Sprintf("tree %s\nparent %s\nauthor %s <%s> %s\ncommitter %s <%s> %s\n\n%s\n\n\nTo pass the absurd cryptographic restriction, I have appended these hashes:  ",
+func MakeFullUser(name string, email string) string {
+	return fmt.Sprintf("%s <%s>", name, email)
+}
+
+func MakeCommitPrefix(tree string, parent string, author string, author_time string, committer string, committer_time string, message string) []byte {
+	return []byte(fmt.Sprintf("tree %s\nparent %s\nauthor %s %s\ncommitter %s %s\n\n%s%s  ",
 		tree,
 		parent,
-		author_name, author_email, author_time,
-		committer_name, committer_email, committer_time,
+		author, author_time,
+		committer, committer_time,
 		message,
+		OUR_MESSAGE,
 	))
+}
+
+func ParseCommit(commit string) (bool, string, string, string, string, string, string, string) {
+		matches := re_commit.FindStringSubmatch(commit)
+		if(matches == nil) {
+			return false, "", "", "", "", "", "", ""
+		}
+
+		i := strings.Index(matches[7], OUR_MESSAGE)
+		if(i == -1) {
+			return true, matches[1], matches[2], matches[3], matches[4], matches[5], matches[6], matches[7]
+		}
+
+		return true, matches[1], matches[2], matches[3], matches[4], matches[5], matches[6], matches[7][:i]
 }
 
 func WriteCommit(commit *Commit) error {
